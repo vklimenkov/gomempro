@@ -6,6 +6,7 @@ import (
     "os"
     "os/exec"
     "time"
+    "encoding/json"
 )
 
 // сколько ключей достаём за раз в бенчмарке мультигета
@@ -108,12 +109,15 @@ func TestSetGetGetMulti(t *testing.T) {
 }
 
 
-// бенчмарки запускаю на заранее поднятом TCP-мемкеше
-// т.к. через setupMemcache() почему-то капризничает 
 func BenchmarkGetMulti(b *testing.B) {
     defer quiet()()
 
-    mc := New("localhost:11211")
+    err := setupMemcache()
+    if err != nil {
+        b.Skip("skipping test; couldn't start memcached")
+    }
+    defer stopMemcache()
+    mc := New(getSocket())
 
     for i := 0; i < multi_get_size; i++ {
         x := Example{Num: i*100, Str: "abcdefgijklmnop"}
@@ -121,13 +125,16 @@ func BenchmarkGetMulti(b *testing.B) {
         mc.SetStruct(key, x)
     }
 
+    b.ResetTimer()
     for j := 0; j < b.N; j++ {
+        b.StopTimer()
         mult := make(map[string]any)
         for i := 0; i < multi_get_size; i++ {
             var y Example
             key := fmt.Sprintf("testkey%d", i)
             mult[key] = &y
         }
+        b.StartTimer()
         mc.GetMultiStruct(mult)
     }
 }
@@ -144,15 +151,74 @@ func BenchmarkGetSingle(b *testing.B) {
         mc.SetStruct(key, x)
     }
 
+    b.ResetTimer()
     for j := 0; j < b.N; j++ {
+        b.StopTimer()
         for i := 0; i < multi_get_size; i++ {
             var y Example
             key := fmt.Sprintf("testkey%d", i)
+            b.StartTimer()
             mc.GetStruct(key, &y)
         }
     }
 }
 
+
+// интересно понять, насколько стоило заморачиваться
+// с распараллеливанием декодинга данных в GetMultiStruct
+// метод мог получиться гораздо проще, без каналов, горутин и мьютексов, 
+// вот такой:
+// (PS метод хоть и с большой буквы, но не экспортируется из тестов)
+func (m *MemPro) GetMultiStructSimple(list map[string]any) error {
+    keys := make([]string, len(list))
+    i := 0
+    for name := range list {
+        keys[i] = name
+        i++
+    }
+    items, err := m.GetMulti(keys)
+    if err != nil {
+        return err
+    }
+    for _, item := range items {
+        err = json.Unmarshal(item.Value, list[item.Key])
+        if err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
+// и теперь бенчмарк с этим методом, аналогичный BenchmarkGetMulti
+func BenchmarkGetMultiSimple(b *testing.B) {
+    defer quiet()()
+
+    err := setupMemcache()
+    if err != nil {
+        b.Skip("skipping test; couldn't start memcached")
+    }
+    defer stopMemcache()
+    mc := New(getSocket())
+
+    for i := 0; i < multi_get_size; i++ {
+        x := Example{Num: i*100, Str: "abcdefgijklmnop"}
+        key := fmt.Sprintf("testkey%d", i)
+        mc.SetStruct(key, x)
+    }
+
+    b.ResetTimer()
+    for j := 0; j < b.N; j++ {
+        b.StopTimer()
+        mult := make(map[string]any)
+        for i := 0; i < multi_get_size; i++ {
+            var y Example
+            key := fmt.Sprintf("testkey%d", i)
+            mult[key] = &y
+        }
+        b.StartTimer()
+        mc.GetMultiStructSimple(mult)
+    }
+}
 
 // на время бенчмарков скрываем разный мусорный вывод в stdout
 func quiet() func() {
