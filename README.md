@@ -50,5 +50,22 @@ fmt.Println(*v) // {123 abc}
 // также можно пользоваться всеми методами memcache:
 new_val, err := mc.Increment("key_three", 1)
  ```
+## Бенчмарки
+Находятся вместе с тестами в mempro_test.go. 
+
+Сравнивал три метода. Первый - BenchmarkGetMulti, который с помощью GetMultiStruct получает за раз 100 ключей из мемкеша. Второй, BenchmarkGetSingle - те же 100 ключей, но в цикле через единичный гет. Третий, самый интересный: версия GetMultiStruct в которой дешифровка данных в структуры идёт не параллельно в горутинах, а в один поток (BenchmarkGetMultiSimple). Это позволяет сильно упростить код. Результаты:
+
+```
+goos: linux
+goarch: amd64
+pkg: github.com/vklimenkov/gomempro
+cpu: 11th Gen Intel(R) Core(TM) i7-1185G7 @ 3.00GHz
+BenchmarkGetMulti-8                 1000         39944 ns/op        9264 B/op        123 allocs/op
+BenchmarkGetSingle-8                1000       1420962 ns/op       63843 B/op       2197 allocs/op
+BenchmarkGetMultiSimple-8           1000         39205 ns/op        9045 B/op        120 allocs/op
+```
+
+Ожидаемый результат - единичный get сильно проигрывает мульти-версии, и по скорости и по работе с памятью. А вот распараллеливание дешифровки практически ничего не даёт. Видимо, потенциальный выигрыш нивелируется усложнением кода и вводом дполнительных действий и локов. Так что можно обойтись простой версией метода, BenchmarkGetMultiSimple
+
 ## Лицензия
 Свободное распространение
