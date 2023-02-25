@@ -60,12 +60,12 @@ goos: linux
 goarch: amd64
 pkg: github.com/vklimenkov/gomempro
 cpu: 11th Gen Intel(R) Core(TM) i7-1185G7 @ 3.00GHz
-BenchmarkGetMulti-8                 1000         39944 ns/op        9264 B/op        123 allocs/op
-BenchmarkGetSingle-8                1000       1420962 ns/op       63843 B/op       2197 allocs/op
-BenchmarkGetMultiSimple-8           1000         39205 ns/op        9045 B/op        120 allocs/op
+BenchmarkGetMulti-8                 4173        270738 ns/op       69922 B/op       1620 allocs/op
+BenchmarkGetSingle-8                 919       1353884 ns/op       53439 B/op       1797 allocs/op
+BenchmarkGetMultiSimple-8           4104        247973 ns/op       63158 B/op       1516 allocs/op
 ```
 
-Ожидаемый результат - единичный get сильно проигрывает мульти-версии, и по скорости и по работе с памятью. А вот распараллеливание дешифровки практически ничего не даёт. Видимо, потенциальный выигрыш нивелируется усложнением кода и вводом дполнительных действий и локов. Так что можно обойтись простой версией метода, BenchmarkGetMultiSimple
+Ожидаемый результат - единичный get сильно проигрывает мульти-версии, и по скорости и по работе с памятью. А вот распараллеливание дешифровки практически ничего не даёт. Видимо, потенциальный выигрыш нивелируется усложнением кода и вводом дполнительных действий. Так что можно обойтись простой версией метода, BenchmarkGetMultiSimple
 
 ## Лицензия
 Свободное распространение

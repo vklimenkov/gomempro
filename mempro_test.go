@@ -50,6 +50,11 @@ func setupMemcache () error {
         time.Sleep(time.Duration(25*i) * time.Millisecond)
     }
 
+    // пришлось добавить ещё этот слип,
+    // т.к. на моей машине иногда возникали сбои
+    // обращения к сокету
+    time.Sleep(1 * time.Second)
+
     return nil
 }
 
@@ -57,6 +62,7 @@ func setupMemcache () error {
 func stopMemcache () {
     //cmd.Wait()
     cmd.Process.Kill()
+    os.Remove(getSocket())
 }
 
 
@@ -122,7 +128,13 @@ func BenchmarkGetMulti(b *testing.B) {
     for i := 0; i < multi_get_size; i++ {
         x := Example{Num: i*100, Str: "abcdefgijklmnop"}
         key := fmt.Sprintf("testkey%d", i)
-        mc.SetStruct(key, x)
+        err := mc.SetStruct(key, x)
+        // здесь и далее в бенчмарках добавлена проверка ошибок
+        // чтобы не оказалось, что мы что-то пытаемся измерить
+        // на неработающем мемкеше
+        if err != nil {
+            b.Fatal(err)
+        }
     }
 
     b.ResetTimer()
@@ -135,7 +147,10 @@ func BenchmarkGetMulti(b *testing.B) {
             mult[key] = &y
         }
         b.StartTimer()
-        mc.GetMultiStruct(mult)
+        err := mc.GetMultiStruct(mult)
+        if err != nil {
+            b.Fatal(err)
+        }
     }
 }
 
@@ -148,7 +163,10 @@ func BenchmarkGetSingle(b *testing.B) {
     for i := 0; i < multi_get_size; i++ {
         x := Example{Num: i*100, Str: "abcdefgijklmnop"}
         key := fmt.Sprintf("testkey%d", i)
-        mc.SetStruct(key, x)
+        err := mc.SetStruct(key, x)
+        if err != nil {
+            b.Fatal(err)
+        }
     }
 
     b.ResetTimer()
@@ -158,7 +176,10 @@ func BenchmarkGetSingle(b *testing.B) {
             var y Example
             key := fmt.Sprintf("testkey%d", i)
             b.StartTimer()
-            mc.GetStruct(key, &y)
+            err := mc.GetStruct(key, &y)
+            if err != nil {
+                b.Fatal(err)
+            }
         }
     }
 }
@@ -166,7 +187,7 @@ func BenchmarkGetSingle(b *testing.B) {
 
 // интересно понять, насколько стоило заморачиваться
 // с распараллеливанием декодинга данных в GetMultiStruct
-// метод мог получиться гораздо проще, без каналов, горутин и мьютексов, 
+// метод мог получиться попроще, без каналов и горутин
 // вот такой:
 // (PS метод хоть и с большой буквы, но не экспортируется из тестов)
 func (m *MemPro) GetMultiStructSimple(list map[string]any) error {
@@ -203,7 +224,10 @@ func BenchmarkGetMultiSimple(b *testing.B) {
     for i := 0; i < multi_get_size; i++ {
         x := Example{Num: i*100, Str: "abcdefgijklmnop"}
         key := fmt.Sprintf("testkey%d", i)
-        mc.SetStruct(key, x)
+        err := mc.SetStruct(key, x)
+        if err != nil {
+            b.Fatal(err)
+        }
     }
 
     b.ResetTimer()
@@ -216,7 +240,10 @@ func BenchmarkGetMultiSimple(b *testing.B) {
             mult[key] = &y
         }
         b.StartTimer()
-        mc.GetMultiStructSimple(mult)
+        err := mc.GetMultiStructSimple(mult)
+        if err != nil {
+            b.Fatal(err)
+        }
     }
 }
 

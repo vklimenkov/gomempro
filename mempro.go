@@ -10,7 +10,6 @@ github.com/bradfitz/gomemcache/memcache под лицензией Apache2
 package mempro
 
 import (
-    "sync"
     "encoding/json"
     "github.com/bradfitz/gomemcache/memcache"
 )
@@ -63,7 +62,8 @@ func (m *MemPro) GetStruct(key string, obj any) error {
 // достаёт из мемкеша сразу несколько ключей за один запрос
 // это оптимальнее, чем получать их по одному через одиночные Get-ы
 // для ускорения, декодирование происходит в несколько потоков
-// хотя бенчмарки показывают, что ускорение минимальное
+// хотя бенчмарки показывают, что ускорение по сравнению
+// с однопоточным вариантом отсутствует
 func (m *MemPro) GetMultiStruct(list map[string]any) error {
     // почему здесь в качестве аргумента map а не *map
     // в go карта сама по себе содержит не значения, а ссылки на них
@@ -81,29 +81,16 @@ func (m *MemPro) GetMultiStruct(list map[string]any) error {
     if err != nil {
         return err
     }
-    // создаём канал. размер буфера определяет, 
-    // сколько данных туда можно записать до наступления блокировки
-    // по сути, сколько параллельных горутин будут заниматься расшифровкой
+
     ch := make(chan error, buffered)
-    var lk sync.Mutex
+
     for _, item := range items {
-        go func(val []byte, key string) {
-            // любые обращения к карте в многопоточной среде
-            // необходимо оборачивать в мьютекс
-            // иначе свалимся с ошибкой concurrent map writes/reads
-            lk.Lock()
-            obj := list[key]
-            lk.Unlock()
-            // а вот декодирование должно быть вне блокировки
-            // это самая ресурсозатратная операция тут, 
-            // весь смысл данного огорода - её распараллелить
+        go func(val []byte, obj any, ch chan error) {
             ch <- json.Unmarshal(val, obj)
-            lk.Lock()
-            list[key] = obj
-            lk.Unlock()
-        }(item.Value, item.Key)
+        }(item.Value, list[item.Key], ch)
     }
     // проверяем, не свалились ли в канал ошибки
+    // также это способ дождаться завершения всех горутин
     for _ = range items {
         if ge := <-ch; ge != nil {
             err = ge
@@ -111,3 +98,4 @@ func (m *MemPro) GetMultiStruct(list map[string]any) error {
     }
     return err
 }
+
